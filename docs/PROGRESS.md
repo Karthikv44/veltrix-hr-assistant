@@ -8,7 +8,8 @@
 | M1 | Docker, FastAPI skeleton, health lifecycle, identity/session, LLM gateway | Completed | Passed | Passed (27 tests) |
 | M2 | Ingestion pipeline, document loaders, OCR, tables, holiday extraction, Chroma index | Completed | Passed | Passed (39 tests) |
 | M3 | Scoped retrieval, pre-filters, BM25 + dense RRF, packer, eligibility assertions | Completed | Passed | Passed (47 tests) |
-| M4 | Precedence resolver, claim extractor, composer, citations, RAG/refuse routes | In Progress | Pending | Pending |
+| M4 | Precedence resolver, claim extractor, composer, citations, RAG/refuse routes | Completed | Passed | Passed (56 tests) |
+| M5 | Tools (`apply_leave`, etc.), workdays, dates, permissions, 2-step confirm flow | In Progress | Pending | Pending |
 | M2 | Ingestion pipeline, document loaders, OCR, tables, holiday extraction, Chroma index | Planned | - | - |
 | M3 | Scoped retrieval, pre-filters, BM25 + dense RRF, packer, eligibility assertions | Planned | - | - |
 | M4 | Precedence resolver, claim extractor, composer, citations, RAG/refuse routes | Planned | - | - |
