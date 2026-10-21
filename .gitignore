@@ -15,7 +15,7 @@ wheels/
 *.pem
 
 # Data directories (evaluator replaces ./data at runtime)
-data/
+/data/
 chroma_db/
 app.db
 *.sqlite3
