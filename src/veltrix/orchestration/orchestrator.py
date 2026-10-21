@@ -61,6 +61,20 @@ class Orchestrator:
             composer=self.composer,
         )
 
+        from veltrix.data.sessions import SessionManager
+        from veltrix.orchestration.pipelines.tool import ToolPipeline
+        from veltrix.tools.leave import LeaveTools
+
+        self.session_manager = SessionManager(str(self.settings.APP_DB_PATH))
+        self.leave_tools = LeaveTools(
+            db_path=str(self.settings.DB_PATH),
+            app_db_path=str(self.settings.APP_DB_PATH),
+        )
+        self.tool_pipeline = ToolPipeline(
+            leave_tools=self.leave_tools,
+            session_manager=self.session_manager,
+        )
+
     async def handle_message(
         self,
         session_id: str,
@@ -69,6 +83,17 @@ class Orchestrator:
     ) -> ChatResponse:
         """Route and execute a user message, assembling a compliant ChatResponse."""
         reference_date = self.clock.today()
+
+        # Check if there is an active proposal in the confirmation state machine
+        pending = self.session_manager.get_proposal(session_id)
+        if pending is not None:
+            # Route directly to tool confirmation state machine
+            return await self.tool_pipeline.execute_or_propose(
+                session_id=session_id,
+                message=message,
+                ctx=ctx,
+                today=reference_date,
+            )
 
         # 1. Intent classification
         intent = Router.classify_intent(message, ctx)
@@ -80,14 +105,23 @@ class Orchestrator:
                 intended_route="refuse",
             )
 
-        # 3. Handle Greeting (counted as refuse/conversational without tools/docs)
+        # 3. Handle Greeting
         if intent == "greeting":
             return Assembler.assemble_response(
                 answer=GREETING_MESSAGE,
                 intended_route="refuse",
             )
 
-        # 4. Handle RAG
+        # 4. Handle Leave Tools
+        if intent == "leave_tool":
+            return await self.tool_pipeline.execute_or_propose(
+                session_id=session_id,
+                message=message,
+                ctx=ctx,
+                today=reference_date,
+            )
+
+        # 5. Handle RAG
         if intent == "rag":
             answer, citations, route = await self.rag_pipeline.execute(
                 query=message,
@@ -100,9 +134,10 @@ class Orchestrator:
                 citations=citations,
             )
 
-        # Fallback for leave_tool and hybrid (to be fully connected in M5/M6)
-        return Assembler.assemble_response(
-            answer="Leave management tools will process your request.",
-            intended_route="tool",
-            tool_calls=[],
+        # Fallback to tool pipeline
+        return await self.tool_pipeline.execute_or_propose(
+            session_id=session_id,
+            message=message,
+            ctx=ctx,
+            today=reference_date,
         )
