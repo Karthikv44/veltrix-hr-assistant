@@ -1,0 +1,25 @@
+services:
+  app:
+    container_name: veltrix_app
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+    env_file:
+      - .env
+    environment:
+      - CORPUS_DIR=/app/data/corpus
+      - MANIFEST_PATH=/app/data/manifest.json
+      - DB_PATH=/app/data/veltrix.db
+      - APP_DB_PATH=/app/app.db
+      - CHROMA_DIR=/app/chroma_db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 15s

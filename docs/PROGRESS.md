@@ -5,7 +5,8 @@
 | Milestone | Description | Status | Ruff Gate | Pytest Gate |
 |---|---|---|---|---|
 | M0 | Scaffolding, config, logging, tokens, clock, DI container | Completed | Passed | Passed (8 tests) |
-| M1 | Docker, FastAPI skeleton, health lifecycle, identity/session, LLM gateway | In Progress | Pending | Pending |
+| M1 | Docker, FastAPI skeleton, health lifecycle, identity/session, LLM gateway | Completed | Passed | Passed (27 tests) |
+| M2 | Ingestion pipeline, document loaders, OCR, tables, holiday extraction, Chroma index | In Progress | Pending | Pending |
 | M2 | Ingestion pipeline, document loaders, OCR, tables, holiday extraction, Chroma index | Planned | - | - |
 | M3 | Scoped retrieval, pre-filters, BM25 + dense RRF, packer, eligibility assertions | Planned | - | - |
 | M4 | Precedence resolver, claim extractor, composer, citations, RAG/refuse routes | Planned | - | - |
