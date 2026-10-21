@@ -3,7 +3,7 @@
 import sqlite3
 from typing import cast
 
-from veltrix.domain.models import Employee, LeaveBalance, LeaveRequest, Role
+from veltrix.domain.models import Employee, Role
 
 
 class EmployeeRepository:
