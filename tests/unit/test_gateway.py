@@ -30,7 +30,9 @@ async def test_gateway_rejects_over_budget() -> None:
     gateway = LLMGateway(client=fake_client, max_corpus_tokens=100)
 
     # Generate a string with more than 100 tokens
-    large_corpus = "This is a sentence containing multiple words that will exceed the test token budget. " * 30
+    large_corpus = (
+        "This is a sentence containing multiple words that will exceed the test token budget. " * 30
+    )
     request = LLMRequest(
         messages=[LLMMessage(role="user", content="Summarize")],
         corpus_text=large_corpus,

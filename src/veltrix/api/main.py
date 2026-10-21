@@ -31,16 +31,26 @@ async def run_ingestion_background_task(app: FastAPI) -> None:
 
     Sets app.state.ready = True once ingestion completes.
     """
+    from veltrix.ingestion.pipeline import IngestionPipeline
+
     container = get_container()
     logger.info("Starting background ingestion task...")
 
     try:
-        # Ingestion pipeline will be wired in M2; for now, verify app.db and mark ready
         init_app_db(container.settings.APP_DB_PATH)
-        # Small sleep to simulate background initialization and ensure server listens first
-        await asyncio.sleep(0.1)
-        app.state.ready = True
-        logger.info("Background ingestion completed successfully. Service is ready.")
+        pipeline = IngestionPipeline(container.settings)
+        result = await pipeline.run()
+
+        if result.chunks_created > 0 or result.skipped:
+            app.state.ready = True
+            logger.info(
+                "Background ingestion completed successfully. Service is ready.",
+                chunks_indexed=result.chunks_created,
+                skipped=result.skipped,
+            )
+        else:
+            logger.error("Ingestion produced 0 chunks. Service remains unready.")
+            app.state.ready = False
     except Exception as e:
         logger.error("Background ingestion failed", error=str(e))
         app.state.ready = False

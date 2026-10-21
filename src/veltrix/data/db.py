@@ -74,6 +74,31 @@ def init_app_db(app_db_path: Path | str) -> None:
                 "CREATE INDEX IF NOT EXISTS idx_holidays_region_date ON holidays (region, date);"
             )
 
+            # Chunks metadata and full text in app.db for BM25 and exact lookup
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS chunks (
+                    chunk_id TEXT PRIMARY KEY,
+                    doc_id TEXT NOT NULL,
+                    doc_type TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    text TEXT NOT NULL,
+                    embedded_text TEXT NOT NULL,
+                    locator TEXT NOT NULL,
+                    token_count INTEGER NOT NULL,
+                    authority_rank INTEGER NOT NULL,
+                    access_rank INTEGER NOT NULL,
+                    effective_int INTEGER NOT NULL,
+                    effective_date TEXT NOT NULL,
+                    region_GLOBAL BOOLEAN NOT NULL,
+                    region_IN BOOLEAN NOT NULL,
+                    region_US BOOLEAN NOT NULL,
+                    region_DE BOOLEAN NOT NULL
+                );
+                """
+            )
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_chunks_doc_id ON chunks (doc_id);")
+
             # Ingestion tracking (hash of corpus + manifest)
             conn.execute(
                 """
