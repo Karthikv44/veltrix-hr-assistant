@@ -1,0 +1,33 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info/
+
+# Virtual environments & uv
+.venv/
+
+# Environment files & Secrets
+.env
+*.key
+*.pem
+
+# Data directories (evaluator replaces ./data at runtime)
+data/
+chroma_db/
+app.db
+*.sqlite3
+
+# Test and coverage artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+.ruff_cache/
+
+# IDE & OS files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
