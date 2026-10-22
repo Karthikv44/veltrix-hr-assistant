@@ -1,6 +1,6 @@
 # Veltrix PeopleOps Assistant - Implementation Progress
 
-## Overall Status: IN PROGRESS (Milestone M7)
+## Overall Status: COMPLETED (All Milestones M0 - M7 Finished)
 
 | Milestone | Description | Status | Ruff Gate | Pytest Gate |
 |---|---|---|---|---|
@@ -11,7 +11,7 @@
 | M4 | Precedence resolver, claim extractor, composer, citations, RAG/refuse routes | Completed | Passed | Passed (56 tests) |
 | M5 | Tools (`apply_leave`, etc.), workdays, dates, permissions, 2-step confirm flow | Completed | Passed | Passed (64 tests) |
 | M6 | Hybrid pipeline, future balances, PII masking, injection defenses, log audit | Completed | Passed | Passed (65 tests) |
-| M7 | Mutated corpus tests, integration test suite, evaluation script, README, DESIGN.md | In Progress | Pending | Pending |
+| M7 | Mutated corpus tests, integration test suite, evaluation script, README, DESIGN.md | Completed | Passed | Passed (66 tests) |
 
 ---
 
@@ -20,7 +20,7 @@
 - [x] **Must-Pass 2**: Ineligible documents NEVER sent to LLM (pre-filter in query + assert before prompt). (Verified with canary unit & security tests)
 - [x] **Must-Pass 3**: Zero leave data leakage across roles (`X-Employee-Id` driven, no LLM bypass). (Verified via DB-level permission checks in tools)
 - [x] **Must-Pass 4**: LLM context budget <= 3,000 corpus tokens (tiktoken `cl100k_base`), enforced in gateway and logged. (Verified in LLMGateway decorators & audit tests)
-- [ ] **Must-Pass 5**: Service works on mutated corpus without hardcoded facts. (To verify in M7 integration suite)
+- [x] **Must-Pass 5**: Service works on mutated corpus without hardcoded facts. (Verified via `test_mutated_corpus.py` and `scripts/mutate_corpus.py`)
 
 ---
 
@@ -28,4 +28,7 @@
 - Implemented `FutureBalanceCalculator` in pure Python domain arithmetic accounting for leave type, country accrual schedules, and existing approved requests.
 - Implemented `HybridPipeline` combining deterministic leave balances with scoped RAG for policy context.
 - Implemented full structlog PII scrubbing (emails, phone numbers, employee IDs, IBANs, SSNs) and audit tests in `tests/security/test_log_audit.py`.
-- Verified clean run of 65 unit and security tests.
+- Implemented `scripts/mutate_corpus.py` and integration test `tests/integration/test_mutated_corpus.py` demonstrating zero hard-coding of corpus facts.
+- Implemented evaluation script `scripts/eval_queries.py` exercising RAG, Tools, Two-Step Leave Application, and Refusal routes.
+- Authored comprehensive `DESIGN.md` and updated `README.md` with sample queries and architecture documentation.
+- Verified clean run of 66 tests across unit, integration, and security test suites.

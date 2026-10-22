@@ -101,6 +101,63 @@ make lint
 - **Holiday Extraction**: Automatic parsing of holiday tables from calendar documents into SQLite `holidays` table with flexible date normalization.
 - **Idempotency**: Computes a SHA-256 hash over `manifest.json` and all corpus files. If the hash matches the previous run, re-indexing is skipped.
 
+## Tested Sample Queries and Evaluation
+
+You can execute sample queries against the live API using the bundled evaluation script:
+```bash
+uv run python scripts/eval_queries.py --base-url http://localhost:8000
+```
+
+### Representative Test Cases
+1. **Policy RAG Query (India Medical Leave)**:
+   ```bash
+   curl -X POST http://localhost:8000/chat \
+     -H "Content-Type: application/json" \
+     -H "X-Employee-Id: EMP-001" \
+     -d '{"session_id": "test-s1", "message": "What is the policy for medical leave in India? Do I need a doctor certificate?"}'
+   ```
+   *Expected*: Correctly routes to `rag`, returns medical leave policy provisions for India, notes doctor note thresholds, and cites India leave policy documents.
+
+2. **Leave Balance Query**:
+   ```bash
+   curl -X POST http://localhost:8000/chat \
+     -H "Content-Type: application/json" \
+     -H "X-Employee-Id: EMP-001" \
+     -d '{"session_id": "test-s2", "message": "What is my current annual leave balance?"}'
+   ```
+   *Expected*: Correctly routes to `tool`, executes `get_leave_balance` via database lookup, and returns remaining and total leave days.
+
+3. **Leave Application Flow (Two-Step Confirmation)**:
+   - **Step 1 (Proposal)**:
+     ```bash
+     curl -X POST http://localhost:8000/chat \
+       -H "Content-Type: application/json" \
+       -H "X-Employee-Id: EMP-001" \
+       -d '{"session_id": "leave-flow-1", "message": "I want to apply for annual leave next Friday."}'
+     ```
+     *Response*: Returns `awaiting_confirmation: true` and presents a detailed proposal with working days, holiday exclusions, and deduction impact.
+   - **Step 2 (Execution)**:
+     ```bash
+     curl -X POST http://localhost:8000/chat \
+       -H "Content-Type: application/json" \
+       -H "X-Employee-Id: EMP-001" \
+       -d '{"session_id": "leave-flow-1", "message": "Yes, please confirm and submit this request."}'
+     ```
+     *Response*: Executes atomic database insert with `PENDING_APPROVAL` status, returns request ID, and sets `awaiting_confirmation: false`.
+
+4. **Permission Enforcement / Refusal**:
+   - Unauthorized team leave view attempts: If a non-manager employee attempts to query a colleague's or team's leave requests, the tool blocks the request at the database level and returns an authorization refusal error.
+   - Out of scope queries (e.g. coding requests): The router classifies the intent as `refuse` and politely declines to answer non-HR questions.
+
+---
+
+## Testing Mutated Corpus (Must-Pass Check 5)
+To verify that no facts or numbers are hardcoded, generate a mutated corpus and re-run ingestion:
+```bash
+uv run python scripts/mutate_corpus.py --target-dir ./data_mutated
+uv run pytest tests/integration/test_mutated_corpus.py
+```
+
 ---
 
 ## Assumptions
