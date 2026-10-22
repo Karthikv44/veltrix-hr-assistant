@@ -62,6 +62,7 @@ class Orchestrator:
         )
 
         from veltrix.data.sessions import SessionManager
+        from veltrix.orchestration.pipelines.hybrid import HybridPipeline
         from veltrix.orchestration.pipelines.tool import ToolPipeline
         from veltrix.tools.leave import LeaveTools
 
@@ -73,6 +74,11 @@ class Orchestrator:
         self.tool_pipeline = ToolPipeline(
             leave_tools=self.leave_tools,
             session_manager=self.session_manager,
+        )
+        self.hybrid_pipeline = HybridPipeline(
+            rag_pipeline=self.rag_pipeline,
+            leave_tools=self.leave_tools,
+            db_path=str(self.settings.DB_PATH),
         )
 
     async def handle_message(
@@ -112,7 +118,21 @@ class Orchestrator:
                 intended_route="refuse",
             )
 
-        # 4. Handle Leave Tools
+        # 4. Handle Hybrid (Both documents and tools)
+        if intent == "hybrid":
+            answer, citations, tool_calls = await self.hybrid_pipeline.execute(
+                query=message,
+                ctx=ctx,
+                today=reference_date,
+            )
+            return Assembler.assemble_response(
+                answer=answer,
+                intended_route="hybrid",
+                citations=citations,
+                tool_calls=tool_calls,
+            )
+
+        # 5. Handle Leave Tools
         if intent == "leave_tool":
             return await self.tool_pipeline.execute_or_propose(
                 session_id=session_id,
@@ -121,7 +141,7 @@ class Orchestrator:
                 today=reference_date,
             )
 
-        # 5. Handle RAG
+        # 6. Handle RAG
         if intent == "rag":
             answer, citations, route = await self.rag_pipeline.execute(
                 query=message,
