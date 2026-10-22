@@ -80,7 +80,16 @@ To run the service locally:
 uv run uvicorn veltrix.api.main:app --host 0.0.0.0 --port 8000
 ```
 
-### 5. Running the Automated Test Suite
+### 5. Running the Streamlit Web Front-End
+Launch the professional Streamlit UI:
+```bash
+make ui
+# Or directly:
+uv run streamlit run src/veltrix/ui/app.py --server.port 8501
+```
+Open your browser at `http://localhost:8501`. You will have an input box in the sidebar to enter any Employee ID (e.g. `E1001` for HR, `E2001` for Manager, `E3001` for Employee), which is sent to the `/chat` endpoint using the `Authorization: Bearer <ID>` header.
+
+### 6. Running the Automated Test Suite
 Run the test suite via `make` or `uv`:
 ```bash
 make test
