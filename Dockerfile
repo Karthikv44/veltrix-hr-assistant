@@ -29,11 +29,11 @@ COPY --from=uv_bin /uv /uvx /usr/local/bin/
 
 WORKDIR /app
 
-# Copy dependency specifications
-COPY pyproject.toml uv.lock ./
+# Copy dependency specifications and project metadata
+COPY pyproject.toml uv.lock README.md ./
 
 # Install python dependencies without development packages
-RUN uv sync --frozen --no-dev --no-cache
+RUN uv sync --frozen --no-dev --no-install-project --no-cache
 
 # Pre-download fastembed model and tiktoken encoding into image cache
 RUN mkdir -p /app/.cache/tiktoken /app/.cache/fastembed && \
@@ -43,6 +43,9 @@ RUN mkdir -p /app/.cache/tiktoken /app/.cache/fastembed && \
 # Copy source code and scripts
 COPY src/ ./src/
 COPY Makefile ./
+
+# Sync project package itself into the environment
+RUN uv sync --frozen --no-dev --no-cache
 
 # Create data and db mount directories
 RUN mkdir -p /app/data /app/chroma_db
