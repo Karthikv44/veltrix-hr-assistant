@@ -15,11 +15,18 @@ from veltrix.llm.gateway import LLMGateway
 logger = get_logger("composer")
 
 
+class UsedCitation(BaseModel):
+    """Schema for a citation used in an answer."""
+
+    doc_id: str = Field(..., description="The document ID from the passage header")
+    locator: str = Field(default="", description="The section or page locator")
+
+
 class ComposerOutput(BaseModel):
     """Schema for composed answer and citations."""
 
     answer: str
-    used_citations: list[dict[str, str]] = Field(default_factory=list)
+    used_citations: list[UsedCitation] = Field(default_factory=list)
 
 
 COMPOSITION_SYSTEM_PROMPT = """You are the Veltrix PeopleOps Assistant.
@@ -123,8 +130,14 @@ class AnswerComposer:
                 citations_dict[(ac.doc_id, ac.locator)] = ac
 
             for rc in raw_cites:
-                doc_id = rc.get("doc_id", "").strip()
-                locator = rc.get("locator", "").strip()
+                if isinstance(rc, dict):
+                    doc_id = rc.get("doc_id", "").strip()
+                    locator = rc.get("locator", "").strip()
+                elif hasattr(rc, "doc_id"):
+                    doc_id = getattr(rc, "doc_id", "").strip()
+                    locator = getattr(rc, "locator", "").strip()
+                else:
+                    continue
                 if doc_id in valid_doc_ids and locator:
                     citations_dict[(doc_id, locator)] = Citation(doc_id=doc_id, locator=locator)
 

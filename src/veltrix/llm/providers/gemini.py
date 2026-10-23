@@ -11,6 +11,23 @@ from veltrix.llm.base import LLMRequest, LLMResponse
 logger = get_logger("gemini_client")
 
 
+def _strip_additional_properties(schema: Any) -> Any:
+    """Recursively strip 'additionalProperties' from JSON schema dictionaries.
+
+    The Google Gemini Developer API rejects schemas containing 'additionalProperties',
+    which Pydantic generates by default for generic Dict types.
+    """
+    if isinstance(schema, dict):
+        return {
+            k: _strip_additional_properties(v)
+            for k, v in schema.items()
+            if k != "additionalProperties"
+        }
+    if isinstance(schema, list):
+        return [_strip_additional_properties(item) for item in schema]
+    return schema
+
+
 class GeminiClient:
     """LLM client adapter for Google Gemini models using official google-genai SDK."""
 
@@ -49,7 +66,15 @@ class GeminiClient:
                 config["system_instruction"] = system_instruction
             if request.response_schema:
                 config["response_mime_type"] = "application/json"
-                config["response_schema"] = request.response_schema
+                if hasattr(request.response_schema, "model_json_schema"):
+                    raw_schema = request.response_schema.model_json_schema()
+                    config["response_schema"] = _strip_additional_properties(raw_schema)
+                elif isinstance(request.response_schema, dict):
+                    config["response_schema"] = _strip_additional_properties(
+                        request.response_schema
+                    )
+                else:
+                    config["response_schema"] = request.response_schema
 
             # Execute generation
             response = await client.aio.models.generate_content(
