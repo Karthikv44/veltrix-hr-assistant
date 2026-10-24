@@ -33,9 +33,27 @@ class ToolPipeline:
         message: str,
         ctx: RequestContext,
         today: date,
+        action: str | None = None,
+        extracted_leave_type: str | None = None,
+        extracted_dates: list[str] | None = None,
+        extracted_request_id: str | None = None,
     ) -> ChatResponse:
-        """Route tool inquiries, write proposals, or confirmations."""
+        """Route tool inquiries, write proposals, or confirmations based on classified action."""
         text = message.strip().lower()
+
+        # If action not passed (e.g. direct unit test of ToolPipeline without orchestrator LLM),
+        # infer action cleanly from the direct request intent
+        if action is None:
+            if "cancel" in text:
+                action = "cancel_leave"
+            elif any(w in text for w in ("apply", "book", "request")):
+                action = "apply_leave"
+            elif any(w in text for w in ("team", "direct reports")):
+                action = "team_leave"
+            elif any(w in text for w in ("requests", "history", "list")):
+                action = "list_requests"
+            else:
+                action = "check_balance"
 
         # 1. Check if there is a pending proposal waiting for confirmation
         pending_proposal = self.state_machine.get_pending_proposal(session_id)
@@ -122,18 +140,10 @@ class ToolPipeline:
                 self.state_machine.clear_proposal(session_id)
 
         # 2. Check for balance queries: get_leave_balance
-        if (
-            "balance" in text
-            or "how many days" in text
-            or "pto" in text
-            or "quota" in text
-            or "remaining" in text
-            or "afford" in text
-            or "enough days" in text
-            or "enough leave" in text
-        ):
-            # Extract leave_type if specified
-            lt = "annual" if "annual" in text else ("sick" if "sick" in text else None)
+        if action == "check_balance":
+            lt = extracted_leave_type or (
+                "annual" if "annual" in text else ("sick" if "sick" in text else None)
+            )
             res = await self.leave_tools.get_leave_balance(
                 ctx=ctx, employee_id=ctx.employee_id, leave_type=lt
             )
@@ -157,12 +167,7 @@ class ToolPipeline:
             )
 
         # 3. Check for list leave requests
-        if (
-            "pending requests" in text
-            or "my requests" in text
-            or "list leave" in text
-            or "leave history" in text
-        ):
+        if action == "list_requests":
             res = await self.leave_tools.list_leave_requests(ctx=ctx, employee_id=ctx.employee_id)
             tool_record = ToolCallRecord(
                 name="list_leave_requests",
@@ -186,8 +191,7 @@ class ToolPipeline:
             )
 
         # 4. Check for team leave: get_team_leave (Managers only)
-        if "team leave" in text or "direct reports" in text:
-            # Default to rest of 2026 or parse range
+        if action == "team_leave":
             start_dt = today
             end_dt = date(2026, 12, 31)
             res = await self.leave_tools.get_team_leave(
@@ -219,10 +223,14 @@ class ToolPipeline:
             )
 
         # 5. Check for cancel_leave proposal
-        if "cancel" in text:
-            # Look for request_id (UUID or req_...)
-            req_match = re.search(r"\b([a-f0-9-]{36}|req_[a-zA-Z0-9]+)\b", text)
-            if not req_match:
+        if action == "cancel_leave":
+            req_id = extracted_request_id
+            if not req_id:
+                req_match = re.search(r"\b([a-f0-9-]{36}|req_[a-zA-Z0-9]+)\b", text)
+                if req_match:
+                    req_id = req_match.group(1)
+
+            if not req_id:
                 # Need to clarify which request
                 res = await self.leave_tools.list_leave_requests(
                     ctx=ctx, employee_id=ctx.employee_id
@@ -236,13 +244,11 @@ class ToolPipeline:
                         intended_route="tool",
                         tool_calls=[],
                     )
-                # Route clarify: citations empty, tool_calls empty
                 return Assembler.assemble_response(
                     answer=f"Which leave request would you like to cancel? Please provide the request ID from your active requests: {', '.join(r['request_id'] for r in reqs[:3])}.",
                     intended_route="clarify",
                 )
 
-            req_id = req_match.group(1)
             # Dry-run validation
             conn = sqlite3.connect(self.leave_tools.db_path)
             conn.row_factory = sqlite3.Row
@@ -290,19 +296,29 @@ class ToolPipeline:
             )
 
         # 6. Check for apply_leave proposal
-        if "apply" in text or "book" in text or "request" in text:
-            # Check leave type
-            lt = "annual" if "annual" in text else ("sick" if "sick" in text else None)
+        if action == "apply_leave":
+            lt = extracted_leave_type or (
+                "annual" if "annual" in text else ("sick" if "sick" in text else None)
+            )
             if not lt:
                 return Assembler.assemble_response(
                     answer="Would you like to apply for 'annual' leave or 'sick' leave? Please specify the leave type.",
                     intended_route="clarify",
                 )
 
-            # Resolve dates
-            dates_found = re.findall(r"\b\d{4}-\d{2}-\d{2}\b", text)
+            # Resolve dates from extracted or message
+            dates_found = (
+                [d for d in extracted_dates if re.match(r"^\d{4}-\d{2}-\d{2}$", d)]
+                if extracted_dates
+                else []
+            )
+            if len(dates_found) < 2:
+                dates_found = re.findall(r"\b\d{4}-\d{2}-\d{2}\b", text)
+
             if len(dates_found) >= 2:
                 s_date_str, e_date_str = dates_found[0], dates_found[1]
+            elif len(dates_found) == 1:
+                s_date_str = e_date_str = dates_found[0]
             elif "next week" in text:
                 curr_monday = today - timedelta(days=today.weekday())
                 next_mon = curr_monday + timedelta(days=7)
@@ -324,7 +340,6 @@ class ToolPipeline:
             )
 
             if not is_valid:
-                # Reject immediately with route tool, status error, and NO proposal
                 tool_record = ToolCallRecord(
                     name="apply_leave",
                     args={"leave_type": lt, "start_date": s_date_str, "end_date": e_date_str},

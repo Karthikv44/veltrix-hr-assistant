@@ -101,25 +101,26 @@ class Orchestrator:
                 today=reference_date,
             )
 
-        # 1. Intent classification (Deterministic fast-path + Dual-LLM semantic fallback)
-        intent = await Router.classify_intent(message, ctx, gateway=self.gateway)
+        # 1. Intent classification via LLM-driven classifier (Dual-LLM Security Pattern)
+        classification = await Router.classify(message, ctx, gateway=self.gateway)
+        route = classification.route
 
         # 2. Handle Refuse
-        if intent == "refuse":
+        if route == "refuse":
             return Assembler.assemble_response(
                 answer=REFUSAL_MESSAGE,
                 intended_route="refuse",
             )
 
         # 3. Handle Greeting
-        if intent == "greeting":
+        if route == "greeting":
             return Assembler.assemble_response(
                 answer=GREETING_MESSAGE,
                 intended_route="refuse",
             )
 
         # 4. Handle Hybrid (Both documents and tools)
-        if intent == "hybrid":
+        if route == "hybrid":
             answer, citations, tool_calls = await self.hybrid_pipeline.execute(
                 query=message,
                 ctx=ctx,
@@ -132,25 +133,29 @@ class Orchestrator:
                 tool_calls=tool_calls,
             )
 
-        # 5. Handle Leave Tools
-        if intent == "leave_tool":
+        # 5. Handle Leave Tools (Action driven directly from classified intent)
+        if route == "leave_tool":
             return await self.tool_pipeline.execute_or_propose(
                 session_id=session_id,
                 message=message,
                 ctx=ctx,
                 today=reference_date,
+                action=classification.action,
+                extracted_leave_type=classification.leave_type,
+                extracted_dates=classification.dates_referenced,
+                extracted_request_id=classification.request_id,
             )
 
         # 6. Handle RAG
-        if intent == "rag":
-            answer, citations, route = await self.rag_pipeline.execute(
+        if route == "rag":
+            answer, citations, rag_route = await self.rag_pipeline.execute(
                 query=message,
                 ctx=ctx,
                 reference_date=reference_date,
             )
             return Assembler.assemble_response(
                 answer=answer,
-                intended_route=route,  # "rag" or "no_answer"
+                intended_route=rag_route,  # "rag" or "no_answer"
                 citations=citations,
             )
 
@@ -160,4 +165,8 @@ class Orchestrator:
             message=message,
             ctx=ctx,
             today=reference_date,
+            action=classification.action,
+            extracted_leave_type=classification.leave_type,
+            extracted_dates=classification.dates_referenced,
+            extracted_request_id=classification.request_id,
         )
