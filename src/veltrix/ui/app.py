@@ -198,10 +198,11 @@ for msg in st.session_state["messages"]:
                     doc_id = cit.get("doc_id", "Unknown")
                     title = cit.get("title", "")
                     locator = cit.get("locator", "")
+                    title_part = f": {title}" if title else ""
                     st.markdown(
                         f"""
                         <div class="citation-box">
-                            <strong>{doc_id}</strong>: {title} <br/>
+                            <strong>{doc_id}</strong>{title_part} <br/>
                             <small><em>Reference: {locator}</em></small>
                         </div>
                         """,
@@ -240,15 +241,17 @@ if user_prompt:
                 f"{api_base_url}/chat",
                 json=payload,
                 headers=headers,
-                timeout=35.0,
+                timeout=100.0,
             )
 
             if response.status_code == 200:
                 data = response.json()
-                bot_text = data.get("content", "")
+                bot_text = data.get("answer") or data.get("content") or ""
                 bot_route = data.get("route", "")
                 bot_citations = data.get("citations", [])
-                bot_confirm = data.get("awaiting_confirmation", False)
+                bot_confirm = data.get("pending_confirmation") or data.get(
+                    "awaiting_confirmation", False
+                )
 
                 st.markdown(bot_text)
 
@@ -273,10 +276,11 @@ if user_prompt:
                             doc_id = cit.get("doc_id", "Unknown")
                             title = cit.get("title", "")
                             locator = cit.get("locator", "")
+                            title_part = f": {title}" if title else ""
                             st.markdown(
                                 f"""
                                 <div class="citation-box">
-                                    <strong>{doc_id}</strong>: {title} <br/>
+                                    <strong>{doc_id}</strong>{title_part} <br/>
                                     <small><em>Reference: {locator}</em></small>
                                 </div>
                                 """,
