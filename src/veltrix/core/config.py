@@ -30,7 +30,7 @@ class Settings(BaseSettings):
 
     # LLM settings
     LLM_PROVIDER: str = "gemini"
-    LLM_MODEL: str = "gemini-2.5-flash"
+    LLM_MODEL: str = "gemini-3.1-flash-lite"
     GEMINI_API_KEY: str = ""
     GOOGLE_API_KEY: str = ""
     OPENAI_API_KEY: str = ""
@@ -45,7 +45,7 @@ class Settings(BaseSettings):
     CITE_CALENDAR_IN_TOOL_ROUTE: bool = False
     LOG_LEVEL: str = "INFO"
     MAX_CORPUS_TOKENS: int = 3000
-    REQUEST_TIMEOUT_SECONDS: float = 25.0
+    REQUEST_TIMEOUT_SECONDS: float = 100.00
 
 
 @lru_cache(maxsize=1)

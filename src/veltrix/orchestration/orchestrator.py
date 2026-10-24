@@ -101,8 +101,8 @@ class Orchestrator:
                 today=reference_date,
             )
 
-        # 1. Intent classification
-        intent = Router.classify_intent(message, ctx)
+        # 1. Intent classification (Deterministic fast-path + Dual-LLM semantic fallback)
+        intent = await Router.classify_intent(message, ctx, gateway=self.gateway)
 
         # 2. Handle Refuse
         if intent == "refuse":

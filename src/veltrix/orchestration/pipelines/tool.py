@@ -122,7 +122,16 @@ class ToolPipeline:
                 self.state_machine.clear_proposal(session_id)
 
         # 2. Check for balance queries: get_leave_balance
-        if "balance" in text or "how many days" in text:
+        if (
+            "balance" in text
+            or "how many days" in text
+            or "pto" in text
+            or "quota" in text
+            or "remaining" in text
+            or "afford" in text
+            or "enough days" in text
+            or "enough leave" in text
+        ):
             # Extract leave_type if specified
             lt = "annual" if "annual" in text else ("sick" if "sick" in text else None)
             res = await self.leave_tools.get_leave_balance(
