@@ -92,17 +92,6 @@ class Orchestrator:
 
         # Check if there is an active proposal in the confirmation state machine
         pending = self.session_manager.get_proposal(session_id)
-        if pending is not None:
-            # Route directly to tool confirmation state machine
-            res = await self.tool_pipeline.execute_or_propose(
-                session_id=session_id,
-                message=message,
-                ctx=ctx,
-                today=reference_date,
-            )
-            self.session_manager.append_message(session_id, "user", message)
-            self.session_manager.append_message(session_id, "assistant", res.answer)
-            return res
 
         # Retrieve conversation history for context continuity across turns
         history = self.session_manager.get_recent_messages(session_id, limit=6)
@@ -114,11 +103,44 @@ class Orchestrator:
             gateway=self.gateway,
             reference_date=reference_date.isoformat(),
             history=history,
+            pending_proposal=pending,
         )
         route = classification.route
 
         # Record user message in session history
         self.session_manager.append_message(session_id, "user", message)
+
+        # Handle pending confirmation if active
+        if pending is not None:
+            if classification.action == "confirm":
+                res = await self.tool_pipeline.execute_or_propose(
+                    session_id=session_id,
+                    message=message,
+                    ctx=ctx,
+                    today=reference_date,
+                    action="confirm",
+                )
+                self.session_manager.append_message(session_id, "assistant", res.answer)
+                return res
+            elif classification.action == "cancel_proposal":
+                self.session_manager.clear_proposal(session_id)
+                res = Assembler.assemble_response(
+                    answer="Your pending action has been cancelled.",
+                    intended_route="tool",
+                    tool_calls=[],
+                    pending_confirmation=False,
+                )
+                self.session_manager.append_message(session_id, "assistant", res.answer)
+                return res
+            else:
+                # Any other prompt discards the proposal and continues dynamically
+                logger.info(
+                    "Discarding unconfirmed proposal due to new intent",
+                    session_id=session_id,
+                    new_action=classification.action,
+                    new_route=classification.route,
+                )
+                self.session_manager.clear_proposal(session_id)
 
         # 2. Handle Refuse
         if route == "refuse":

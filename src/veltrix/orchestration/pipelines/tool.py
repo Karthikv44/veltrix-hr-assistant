@@ -42,25 +42,49 @@ class ToolPipeline:
         """Route tool inquiries, write proposals, or confirmations based on classified action."""
         text = message.strip().lower()
 
-        # If action not passed (e.g. direct unit test of ToolPipeline without orchestrator LLM),
-        # infer action cleanly from the direct request intent
+        # For standalone direct unit tests without orchestrator LLM:
+        # resolve action and slots if not explicitly passed
         if action is None:
-            if "cancel" in text:
-                action = "cancel_leave"
-            elif any(w in text for w in ("apply", "book", "request")):
+            pending_proposal = self.state_machine.get_pending_proposal(session_id)
+            if pending_proposal is not None and self.state_machine.is_confirmation(text):
+                action = "confirm"
+            elif pending_proposal is not None and self.state_machine.is_cancellation(text):
+                action = "cancel_proposal"
+            elif "apply" in text or "book" in text:
                 action = "apply_leave"
-            elif any(w in text for w in ("team", "direct reports")):
+                if not extracted_leave_type:
+                    extracted_leave_type = (
+                        "annual" if "annual" in text else ("sick" if "sick" in text else None)
+                    )
+                if not start_date:
+                    dates_found = re.findall(r"\b\d{4}-\d{2}-\d{2}\b", text)
+                    if len(dates_found) >= 2:
+                        start_date, end_date = dates_found[0], dates_found[1]
+                    elif len(dates_found) == 1:
+                        start_date = end_date = dates_found[0]
+            elif "cancel" in text:
+                action = "cancel_leave"
+                if not extracted_request_id:
+                    req_match = re.search(r"\b([a-f0-9-]{36}|req_[a-zA-Z0-9]+)\b", text)
+                    if req_match:
+                        extracted_request_id = req_match.group(1)
+            elif "team" in text:
                 action = "team_leave"
             elif any(w in text for w in ("requests", "history", "list")):
                 action = "list_requests"
-            else:
+            elif any(w in text for w in ("balance", "quota", "days left")):
                 action = "check_balance"
+                if not extracted_leave_type:
+                    extracted_leave_type = (
+                        "annual" if "annual" in text else ("sick" if "sick" in text else None)
+                    )
+            else:
+                action = "unknown"
 
-        # 1. Check if there is a pending proposal waiting for confirmation
-        pending_proposal = self.state_machine.get_pending_proposal(session_id)
-        if pending_proposal is not None:
-            if self.state_machine.is_confirmation(text):
-                # User confirmed -> Execute in ONE atomic transaction
+        # 1. Check for confirmation / cancellation of pending proposal
+        if action == "confirm":
+            pending_proposal = self.state_machine.get_pending_proposal(session_id)
+            if pending_proposal is not None:
                 self.state_machine.clear_proposal(session_id)
 
                 if pending_proposal.action_type == "apply_leave":
@@ -123,28 +147,25 @@ class ToolPipeline:
                         pending_confirmation=False,
                     )
 
-            elif self.state_machine.is_cancellation(text):
-                # Explicit cancellation of proposal
-                self.state_machine.clear_proposal(session_id)
-                return Assembler.assemble_response(
-                    answer="Your pending action has been cancelled.",
-                    intended_route="tool",
-                    tool_calls=[],
-                    pending_confirmation=False,
-                )
+            return Assembler.assemble_response(
+                answer="There is no active pending action to confirm.",
+                intended_route="tool",
+                tool_calls=[],
+                pending_confirmation=False,
+            )
 
-            else:
-                # Any other prompt discards the proposal and continues normally
-                logger.info(
-                    "Discarding unconfirmed proposal due to unrelated prompt", session_id=session_id
-                )
-                self.state_machine.clear_proposal(session_id)
+        if action == "cancel_proposal":
+            self.state_machine.clear_proposal(session_id)
+            return Assembler.assemble_response(
+                answer="Your pending action has been cancelled.",
+                intended_route="tool",
+                tool_calls=[],
+                pending_confirmation=False,
+            )
 
         # 2. Check for balance queries: get_leave_balance
         if action == "check_balance":
-            lt = extracted_leave_type or (
-                "annual" if "annual" in text else ("sick" if "sick" in text else None)
-            )
+            lt = extracted_leave_type
             res = await self.leave_tools.get_leave_balance(
                 ctx=ctx, employee_id=ctx.employee_id, leave_type=lt
             )
@@ -298,9 +319,7 @@ class ToolPipeline:
 
         # 6. Check for apply_leave proposal
         if action == "apply_leave":
-            lt = extracted_leave_type or (
-                "annual" if "annual" in text else ("sick" if "sick" in text else None)
-            )
+            lt = extracted_leave_type
             if not lt:
                 return Assembler.assemble_response(
                     answer="You mentioned you need leave, but could you please specify whether you would like to request 'annual' or 'sick' leave?",
@@ -309,14 +328,6 @@ class ToolPipeline:
 
             s_date_str = start_date
             e_date_str = end_date or start_date
-
-            # If start_date not provided directly, extract from message
-            if not s_date_str:
-                dates_found = re.findall(r"\b\d{4}-\d{2}-\d{2}\b", text)
-                if len(dates_found) >= 2:
-                    s_date_str, e_date_str = dates_found[0], dates_found[1]
-                elif len(dates_found) == 1:
-                    s_date_str = e_date_str = dates_found[0]
 
             if not s_date_str or not e_date_str:
                 return Assembler.assemble_response(

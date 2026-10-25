@@ -228,3 +228,25 @@ async def test_apply_leave_validation_rejections(test_tools_env) -> None:
     assert resp_2027.route == "tool"
     assert resp_2027.tool_calls[0].status == "error"
     assert "2026" in resp_2027.answer
+
+
+@pytest.mark.asyncio
+async def test_pending_proposal_unrelated_input_does_not_default_to_balance(
+    test_tools_env,
+) -> None:
+    tools, pipeline, veltrix_db, app_db = test_tools_env
+    ctx = RequestContext(employee_id="E1001", role="employee", region="IN")
+    today = date(2026, 9, 15)
+    session_id = "test_sess_unrelated"
+
+    # Step 1: Propose apply_leave
+    msg1 = "apply for annual leave from 2026-10-05 to 2026-10-09"
+    resp1 = await pipeline.execute_or_propose(session_id, msg1, ctx, today)
+    assert resp1.pending_confirmation is True
+
+    # Step 2: User inputs random text "Something"
+    resp2 = await pipeline.execute_or_propose(session_id, "Something", ctx, today)
+    assert resp2.pending_confirmation is False
+    # Must NOT execute get_leave_balance or return leave balance
+    assert "remaining leave balance" not in resp2.answer.lower()
+    assert not any(tc.name == "get_leave_balance" for tc in resp2.tool_calls)
