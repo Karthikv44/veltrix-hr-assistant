@@ -102,7 +102,12 @@ class Orchestrator:
             )
 
         # 1. Intent classification via LLM-driven classifier (Dual-LLM Security Pattern)
-        classification = await Router.classify(message, ctx, gateway=self.gateway)
+        classification = await Router.classify(
+            message=message,
+            ctx=ctx,
+            gateway=self.gateway,
+            reference_date=reference_date.isoformat(),
+        )
         route = classification.route
 
         # 2. Handle Refuse
@@ -154,11 +159,12 @@ class Orchestrator:
                 today=reference_date,
                 action=classification.action,
                 extracted_leave_type=classification.leave_type,
-                extracted_dates=classification.dates_referenced,
+                start_date=classification.start_date,
+                end_date=classification.end_date,
                 extracted_request_id=classification.request_id,
             )
 
-        # 6. Handle RAG
+        # 7. Handle RAG
         if route == "rag":
             answer, citations, rag_route = await self.rag_pipeline.execute(
                 query=message,
@@ -179,6 +185,7 @@ class Orchestrator:
             today=reference_date,
             action=classification.action,
             extracted_leave_type=classification.leave_type,
-            extracted_dates=classification.dates_referenced,
+            start_date=classification.start_date,
+            end_date=classification.end_date,
             extracted_request_id=classification.request_id,
         )

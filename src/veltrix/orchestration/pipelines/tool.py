@@ -2,7 +2,7 @@
 
 import re
 import sqlite3
-from datetime import date, timedelta
+from datetime import date
 
 from veltrix.api.schemas import ChatResponse
 from veltrix.core.logging import get_logger
@@ -35,7 +35,8 @@ class ToolPipeline:
         today: date,
         action: str | None = None,
         extracted_leave_type: str | None = None,
-        extracted_dates: list[str] | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
         extracted_request_id: str | None = None,
     ) -> ChatResponse:
         """Route tool inquiries, write proposals, or confirmations based on classified action."""
@@ -302,31 +303,24 @@ class ToolPipeline:
             )
             if not lt:
                 return Assembler.assemble_response(
-                    answer="Would you like to apply for 'annual' leave or 'sick' leave? Please specify the leave type.",
+                    answer="You mentioned you need leave, but could you please specify whether you would like to request 'annual' or 'sick' leave?",
                     intended_route="clarify",
                 )
 
-            # Resolve dates from extracted or message
-            dates_found = (
-                [d for d in extracted_dates if re.match(r"^\d{4}-\d{2}-\d{2}$", d)]
-                if extracted_dates
-                else []
-            )
-            if len(dates_found) < 2:
-                dates_found = re.findall(r"\b\d{4}-\d{2}-\d{2}\b", text)
+            s_date_str = start_date
+            e_date_str = end_date or start_date
 
-            if len(dates_found) >= 2:
-                s_date_str, e_date_str = dates_found[0], dates_found[1]
-            elif len(dates_found) == 1:
-                s_date_str = e_date_str = dates_found[0]
-            elif "next week" in text:
-                curr_monday = today - timedelta(days=today.weekday())
-                next_mon = curr_monday + timedelta(days=7)
-                next_fri = next_mon + timedelta(days=4)
-                s_date_str, e_date_str = next_mon.isoformat(), next_fri.isoformat()
-            else:
+            # If start_date not provided directly, extract from message
+            if not s_date_str:
+                dates_found = re.findall(r"\b\d{4}-\d{2}-\d{2}\b", text)
+                if len(dates_found) >= 2:
+                    s_date_str, e_date_str = dates_found[0], dates_found[1]
+                elif len(dates_found) == 1:
+                    s_date_str = e_date_str = dates_found[0]
+
+            if not s_date_str or not e_date_str:
                 return Assembler.assemble_response(
-                    answer="Please specify the start date and end date for your leave (YYYY-MM-DD).",
+                    answer=f"You mentioned you need {lt} leave, but could you please specify the dates you would like to request?",
                     intended_route="clarify",
                 )
 
