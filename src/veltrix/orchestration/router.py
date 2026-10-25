@@ -111,6 +111,7 @@ class Router:
         ctx: RequestContext,
         gateway: "LLMGateway",
         reference_date: str = "2026-09-15",
+        history: list[dict[str, str]] | None = None,
     ) -> IntentClassification:
         """Classify user intent using the Intent Classifier LLM (Dual-LLM Pattern).
 
@@ -129,10 +130,16 @@ class Router:
 
         from veltrix.llm.base import LLMMessage, LLMRequest
 
+        history_str = ""
+        if history:
+            history_lines = [f"{m['role'].upper()}: {m['content']}" for m in history[-4:]]
+            history_str = "Prior Conversation History:\n" + "\n".join(history_lines) + "\n\n"
+
         user_content = (
             f"Today's Date: {reference_date}\n"
-            f"Employee ID: {ctx.employee_id} | Role: {ctx.role} | Region: {ctx.region}\n"
-            f"User Message: {message}"
+            f"Employee ID: {ctx.employee_id} | Role: {ctx.role} | Region: {ctx.region}\n\n"
+            f"{history_str}"
+            f"Current User Message: {message}"
         )
 
         request = LLMRequest(

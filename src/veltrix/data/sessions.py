@@ -99,3 +99,29 @@ class SessionManager:
         """Delete pending proposal for the session."""
         with self._get_conn() as conn, conn:
             conn.execute("DELETE FROM proposals WHERE session_id = ?", (session_id,))
+
+    def append_message(self, session_id: str, role: str, content: str) -> None:
+        """Record a message in session history."""
+        now_iso = datetime.now().isoformat()
+        with self._get_conn() as conn, conn:
+            conn.execute(
+                """
+                INSERT INTO messages (session_id, role, content, created_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                (session_id, role, content, now_iso),
+            )
+
+    def get_recent_messages(self, session_id: str, limit: int = 6) -> list[dict[str, str]]:
+        """Retrieve recent conversation history for context continuity."""
+        with self._get_conn() as conn:
+            rows = conn.execute(
+                """
+                SELECT role, content FROM messages
+                WHERE session_id = ?
+                ORDER BY id DESC LIMIT ?
+                """,
+                (session_id, limit),
+            ).fetchall()
+            messages = [{"role": r["role"], "content": r["content"]} for r in reversed(rows)]
+            return messages

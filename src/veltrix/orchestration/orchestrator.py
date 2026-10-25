@@ -94,12 +94,18 @@ class Orchestrator:
         pending = self.session_manager.get_proposal(session_id)
         if pending is not None:
             # Route directly to tool confirmation state machine
-            return await self.tool_pipeline.execute_or_propose(
+            res = await self.tool_pipeline.execute_or_propose(
                 session_id=session_id,
                 message=message,
                 ctx=ctx,
                 today=reference_date,
             )
+            self.session_manager.append_message(session_id, "user", message)
+            self.session_manager.append_message(session_id, "assistant", res.answer)
+            return res
+
+        # Retrieve conversation history for context continuity across turns
+        history = self.session_manager.get_recent_messages(session_id, limit=6)
 
         # 1. Intent classification via LLM-driven classifier (Dual-LLM Security Pattern)
         classification = await Router.classify(
@@ -107,32 +113,42 @@ class Orchestrator:
             ctx=ctx,
             gateway=self.gateway,
             reference_date=reference_date.isoformat(),
+            history=history,
         )
         route = classification.route
 
+        # Record user message in session history
+        self.session_manager.append_message(session_id, "user", message)
+
         # 2. Handle Refuse
         if route == "refuse":
-            return Assembler.assemble_response(
+            res = Assembler.assemble_response(
                 answer=REFUSAL_MESSAGE,
                 intended_route="refuse",
             )
+            self.session_manager.append_message(session_id, "assistant", res.answer)
+            return res
 
         # 3. Handle Greeting
         if route == "greeting":
-            return Assembler.assemble_response(
+            res = Assembler.assemble_response(
                 answer=GREETING_MESSAGE,
                 intended_route="refuse",
             )
+            self.session_manager.append_message(session_id, "assistant", res.answer)
+            return res
 
         # 4. Handle Clarify (Dynamic question formulated by Intent Classifier LLM)
         if route == "clarify":
             clarification_text = classification.clarification_question or (
                 "Could you please clarify your request? For leave applications, please specify whether you need 'annual' or 'sick' leave and the dates."
             )
-            return Assembler.assemble_response(
+            res = Assembler.assemble_response(
                 answer=clarification_text,
                 intended_route="clarify",
             )
+            self.session_manager.append_message(session_id, "assistant", res.answer)
+            return res
 
         # 5. Handle Hybrid (Both documents and tools)
         if route == "hybrid":
@@ -143,16 +159,18 @@ class Orchestrator:
                 leave_type=classification.leave_type,
                 target_month=classification.target_month,
             )
-            return Assembler.assemble_response(
+            res = Assembler.assemble_response(
                 answer=answer,
                 intended_route="hybrid",
                 citations=citations,
                 tool_calls=tool_calls,
             )
+            self.session_manager.append_message(session_id, "assistant", res.answer)
+            return res
 
         # 6. Handle Leave Tools (Action driven directly from classified intent)
         if route == "leave_tool":
-            return await self.tool_pipeline.execute_or_propose(
+            res = await self.tool_pipeline.execute_or_propose(
                 session_id=session_id,
                 message=message,
                 ctx=ctx,
@@ -163,6 +181,8 @@ class Orchestrator:
                 end_date=classification.end_date,
                 extracted_request_id=classification.request_id,
             )
+            self.session_manager.append_message(session_id, "assistant", res.answer)
+            return res
 
         # 7. Handle RAG
         if route == "rag":
@@ -171,14 +191,16 @@ class Orchestrator:
                 ctx=ctx,
                 reference_date=reference_date,
             )
-            return Assembler.assemble_response(
+            res = Assembler.assemble_response(
                 answer=answer,
                 intended_route=rag_route,  # "rag" or "no_answer"
                 citations=citations,
             )
+            self.session_manager.append_message(session_id, "assistant", res.answer)
+            return res
 
         # Fallback to tool pipeline
-        return await self.tool_pipeline.execute_or_propose(
+        res = await self.tool_pipeline.execute_or_propose(
             session_id=session_id,
             message=message,
             ctx=ctx,
@@ -189,3 +211,5 @@ class Orchestrator:
             end_date=classification.end_date,
             extracted_request_id=classification.request_id,
         )
+        self.session_manager.append_message(session_id, "assistant", res.answer)
+        return res
