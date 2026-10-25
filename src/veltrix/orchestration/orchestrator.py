@@ -16,9 +16,7 @@ from veltrix.retrieval.retriever import HybridRetriever
 
 logger = get_logger("orchestrator")
 
-DEFAULT_REFUSAL_MESSAGE = (
-    "I can only assist with Veltrix HR policies and leave management within your permitted scope."
-)
+DEFAULT_REFUSAL_MESSAGE = "I can only assist with your own leave management and authorized Veltrix HR policies within your permitted scope."
 
 DEFAULT_GREETING_MESSAGE = "Hello! I am your Veltrix PeopleOps Assistant. How can I assist you with HR policies or leave today?"
 
@@ -110,6 +108,11 @@ class Orchestrator:
 
         # Retrieve conversation history for context continuity across turns
         history = self.session_manager.get_recent_messages(session_id, limit=6)
+        direct_reports = (
+            self.leave_tools._get_direct_report_ids(ctx.employee_id)
+            if ctx.role == "manager"
+            else set()
+        )
 
         # 1. Intent classification via LLM-driven classifier (Dual-LLM Security Pattern)
         classification = await Router.classify(
@@ -119,6 +122,7 @@ class Orchestrator:
             reference_date=reference_date.isoformat(),
             history=history,
             pending_proposal=pending,
+            direct_reports=direct_reports,
         )
         route = classification.route
 
@@ -217,6 +221,8 @@ class Orchestrator:
                 start_date=classification.start_date,
                 end_date=classification.end_date,
                 extracted_request_id=classification.request_id,
+                target_employee_id=classification.target_employee_id,
+                request_status=classification.request_status,
             )
             self.session_manager.append_message(session_id, "assistant", res.answer)
             return res

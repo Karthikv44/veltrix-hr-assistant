@@ -27,6 +27,9 @@ htmlcov/
 .ruff_cache/
 eval/
 
+# Planning and review docs
+eval_failure_resolution_plan.md
+
 # IDE & OS files
 .DS_Store
 Thumbs.db

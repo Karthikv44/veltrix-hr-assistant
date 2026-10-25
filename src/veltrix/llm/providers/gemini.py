@@ -1,5 +1,6 @@
 """Gemini LLM client implementation using Google GenAI SDK."""
 
+import asyncio
 from typing import Any
 
 import google.genai as genai
@@ -43,53 +44,85 @@ class GeminiClient:
         return self._client
 
     async def complete(self, request: LLMRequest) -> LLMResponse:
-        """Call Gemini model asynchronously."""
-        try:
-            client = self._get_client()
+        """Call Gemini model asynchronously with exponential backoff on transient errors."""
+        max_attempts = 3
+        backoff_sec = 2.0
 
-            # Format prompt from messages
-            contents: list[str] = []
-            system_instruction = None
+        for attempt in range(1, max_attempts + 1):
+            try:
+                client = self._get_client()
 
-            for m in request.messages:
-                if m.role == "system":
-                    system_instruction = m.content
-                else:
-                    contents.append(f"{m.role.upper()}: {m.content}")
+                # Format prompt from messages
+                contents: list[str] = []
+                system_instruction = None
 
-            prompt_text = "\n\n".join(contents)
+                for m in request.messages:
+                    if m.role == "system":
+                        system_instruction = m.content
+                    else:
+                        contents.append(f"{m.role.upper()}: {m.content}")
 
-            config: dict[str, Any] = {
-                "temperature": request.temperature,
-            }
-            if system_instruction:
-                config["system_instruction"] = system_instruction
-            if request.response_schema:
-                config["response_mime_type"] = "application/json"
-                if hasattr(request.response_schema, "model_json_schema"):
-                    raw_schema = request.response_schema.model_json_schema()
-                    config["response_schema"] = _strip_additional_properties(raw_schema)
-                elif isinstance(request.response_schema, dict):
-                    config["response_schema"] = _strip_additional_properties(
-                        request.response_schema
+                prompt_text = "\n\n".join(contents)
+
+                config: dict[str, Any] = {
+                    "temperature": request.temperature,
+                }
+                if system_instruction:
+                    config["system_instruction"] = system_instruction
+                if request.response_schema:
+                    config["response_mime_type"] = "application/json"
+                    if hasattr(request.response_schema, "model_json_schema"):
+                        raw_schema = request.response_schema.model_json_schema()
+                        config["response_schema"] = _strip_additional_properties(raw_schema)
+                    elif isinstance(request.response_schema, dict):
+                        config["response_schema"] = _strip_additional_properties(
+                            request.response_schema
+                        )
+                    else:
+                        config["response_schema"] = request.response_schema
+
+                # Execute generation with a per-request timeout to prevent stalling
+                response = await asyncio.wait_for(
+                    client.aio.models.generate_content(
+                        model=self.model,
+                        contents=prompt_text,
+                        config=config,
+                    ),
+                    timeout=20.0,
+                )
+
+                text_output = response.text or ""
+                return LLMResponse(
+                    content=text_output,
+                    prompt_tokens=100,
+                    completion_tokens=50,
+                )
+
+            except (Exception, asyncio.TimeoutError) as e:
+                err_str = str(e).lower()
+                is_transient = isinstance(e, asyncio.TimeoutError) or any(
+                    code in err_str
+                    for code in (
+                        "503",
+                        "429",
+                        "unavailable",
+                        "resource_exhausted",
+                        "high demand",
+                        "rate limit",
+                        "timeout",
+                        "connection",
                     )
-                else:
-                    config["response_schema"] = request.response_schema
+                )
+                if is_transient and attempt < max_attempts:
+                    logger.warning(
+                        "Gemini API transient error, retrying...",
+                        attempt=attempt,
+                        backoff=backoff_sec,
+                        error=str(e),
+                    )
+                    await asyncio.sleep(backoff_sec)
+                    backoff_sec *= 2.0
+                    continue
 
-            # Execute generation
-            response = await client.aio.models.generate_content(
-                model=self.model,
-                contents=prompt_text,
-                config=config,
-            )
-
-            text_output = response.text or ""
-            return LLMResponse(
-                content=text_output,
-                prompt_tokens=100,
-                completion_tokens=50,
-            )
-
-        except Exception as e:
-            logger.error("Gemini API call failed", error=str(e))
-            raise LLMError(f"Gemini error: {e}") from e
+                logger.error("Gemini API call failed", attempt=attempt, error=str(e))
+                raise LLMError(f"Gemini error: {e}") from e

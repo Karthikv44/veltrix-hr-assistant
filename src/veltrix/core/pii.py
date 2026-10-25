@@ -14,7 +14,8 @@ from typing import Any
 EMAIL_REGEX = re.compile(r"\b([A-Za-z0-9._%+-])[A-Za-z0-9._%+-]*@([A-Za-z0-9.-]+\.[A-Z|a-z]{2,})\b")
 
 # Regex to match phone numbers in common formats
-PHONE_REGEX = re.compile(r"(?:\+?\d{1,3}[-.\s]?)?\(?\d{2,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{3,4}\b")
+PHONE_REGEX = re.compile(r"(?:\+?\d{1,3}[-.\s]?)?\(?\d{2,4}\)?[-.\s]?\d{3,5}[-.\s]?\d{3,5}\b")
+UUID_OR_DATE_REGEX = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|\b\d{4}-\d{2}-\d{2}\b")
 
 
 def mask_email(email: str) -> str:
@@ -40,12 +41,23 @@ def mask_emails_in_text(text: str) -> str:
 
 
 def redact_phones_in_text(text: str) -> str:
-    """Remove or redact phone numbers from text."""
+    """Remove or redact phone numbers from text while preserving UUIDs and ISO dates."""
     if not text:
         return text
-    # Avoid replacing single year numbers or standard identifiers
-    # by ensuring match length and formatting look like phones
-    return PHONE_REGEX.sub("[REDACTED_PHONE]", text)
+
+    protected: list[str] = []
+
+    def save_protected(m: re.Match[str]) -> str:
+        protected.append(m.group(0))
+        return f"__PII_PROT_{len(protected) - 1}__"
+
+    temp = UUID_OR_DATE_REGEX.sub(save_protected, text)
+    temp = PHONE_REGEX.sub("[REDACTED_PHONE]", temp)
+
+    for i, token in enumerate(protected):
+        temp = temp.replace(f"__PII_PROT_{i}__", token)
+
+    return temp
 
 
 def sanitize_text_for_user(text: str) -> str:
@@ -61,7 +73,7 @@ def scrub_pii_from_obj(obj: Any) -> Any:
     if isinstance(obj, str):
         # In logs, mask emails completely and redact phones
         text = EMAIL_REGEX.sub(r"\1***@\2", obj)
-        return PHONE_REGEX.sub("[PHONE_REDACTED]", text)
+        return redact_phones_in_text(text)
     if isinstance(obj, dict):
         return {k: scrub_pii_from_obj(v) for k, v in obj.items()}
     if isinstance(obj, list):

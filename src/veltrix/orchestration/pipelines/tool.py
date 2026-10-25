@@ -3,6 +3,7 @@
 import re
 import sqlite3
 from datetime import date
+from typing import Any
 
 from veltrix.api.schemas import ChatResponse
 from veltrix.core.logging import get_logger
@@ -38,6 +39,8 @@ class ToolPipeline:
         start_date: str | None = None,
         end_date: str | None = None,
         extracted_request_id: str | None = None,
+        target_employee_id: str | None = None,
+        request_status: str | None = None,
     ) -> ChatResponse:
         """Route tool inquiries, write proposals, or confirmations based on classified action."""
         text = message.strip().lower()
@@ -166,19 +169,23 @@ class ToolPipeline:
         # 2. Check for balance queries: get_leave_balance
         if action == "check_balance":
             lt = extracted_leave_type
+            emp_id = target_employee_id or ctx.employee_id
             res = await self.leave_tools.get_leave_balance(
-                ctx=ctx, employee_id=ctx.employee_id, leave_type=lt
+                ctx=ctx, employee_id=emp_id, leave_type=lt
             )
+            tool_args: dict[str, Any] = {"employee_id": emp_id}
+            if lt:
+                tool_args["leave_type"] = lt
+
             tool_record = ToolCallRecord(
                 name="get_leave_balance",
-                args={"employee_id": ctx.employee_id, "leave_type": lt}
-                if lt
-                else {"employee_id": ctx.employee_id},
+                args=tool_args,
                 status="success" if res.get("status") == "success" else "error",
             )
             if res.get("status") == "success":
                 b_parts = [f"{k}: {v} days" for k, v in res["balances"].items()]
-                answer = f"Your current remaining leave balance: {', '.join(b_parts)}."
+                who = f"{emp_id}'s" if emp_id != ctx.employee_id else "Your"
+                answer = f"{who} current remaining leave balance: {', '.join(b_parts)}."
             else:
                 answer = res.get("error_message", "Could not fetch balance.")
 
@@ -190,10 +197,16 @@ class ToolPipeline:
 
         # 3. Check for list leave requests
         if action == "list_requests":
-            res = await self.leave_tools.list_leave_requests(ctx=ctx, employee_id=ctx.employee_id)
+            emp_id = target_employee_id or ctx.employee_id
+            st = request_status
+            res = await self.leave_tools.list_leave_requests(ctx=ctx, employee_id=emp_id, status=st)
+            tool_args = {"employee_id": emp_id}
+            if st:
+                tool_args["status"] = st
+
             tool_record = ToolCallRecord(
                 name="list_leave_requests",
-                args={"employee_id": ctx.employee_id},
+                args=tool_args,
                 status="success" if res.get("status") == "success" else "error",
             )
             reqs = res.get("requests", [])
@@ -202,9 +215,10 @@ class ToolPipeline:
                     f"- {r['request_id']}: {r['leave_type']} from {r['start_date']} to {r['end_date']} ({r['working_days']} days, status: {r['status']})"
                     for r in reqs[:5]
                 ]
-                answer = "Your leave requests:\n" + "\n".join(lines)
+                st_desc = f"{st} " if st else ""
+                answer = f"Your {st_desc}leave requests:\n" + "\n".join(lines)
             else:
-                answer = "You have no recorded leave requests."
+                answer = f"You have no recorded {st or ''} leave requests."
 
             return Assembler.assemble_response(
                 answer=answer,
@@ -214,15 +228,27 @@ class ToolPipeline:
 
         # 4. Check for team leave: get_team_leave (Managers only)
         if action == "team_leave":
-            start_dt = today
-            end_dt = date(2026, 12, 31)
+            s_date = start_date
+            e_date = end_date
+            if not s_date:
+                dates_found = re.findall(r"\b\d{4}-\d{2}-\d{2}\b", text)
+                if len(dates_found) >= 2:
+                    s_date, e_date = dates_found[0], dates_found[1]
+                elif len(dates_found) == 1:
+                    s_date = e_date = dates_found[0]
+                else:
+                    s_date = today.isoformat()
+                    e_date = date(2026, 12, 31).isoformat()
+            if not e_date:
+                e_date = s_date
+
             res = await self.leave_tools.get_team_leave(
-                ctx=ctx, start_date=start_dt.isoformat(), end_date=end_dt.isoformat()
+                ctx=ctx, start_date=s_date, end_date=e_date
             )
             status = "success" if res.get("status") == "success" else "error"
             tool_record = ToolCallRecord(
                 name="get_team_leave",
-                args={"start_date": start_dt.isoformat(), "end_date": end_dt.isoformat()},
+                args={"start_date": s_date, "end_date": e_date},
                 status=status,
             )
             if status == "success":

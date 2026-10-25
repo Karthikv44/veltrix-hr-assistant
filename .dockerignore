@@ -15,3 +15,4 @@ data/
 app.db
 chroma_db/
 eval/
+eval_failure_resolution_plan.md
