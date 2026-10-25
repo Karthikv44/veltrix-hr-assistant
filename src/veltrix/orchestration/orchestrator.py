@@ -4,6 +4,7 @@ from veltrix.api.container import Container
 from veltrix.api.schemas import ChatResponse
 from veltrix.core.logging import get_logger
 from veltrix.domain.models import RequestContext
+from veltrix.llm.prompts import load_prompt
 from veltrix.orchestration.assembler import Assembler
 from veltrix.orchestration.composer import AnswerComposer
 from veltrix.orchestration.extractor import ClaimExtractor
@@ -15,11 +16,25 @@ from veltrix.retrieval.retriever import HybridRetriever
 
 logger = get_logger("orchestrator")
 
-REFUSAL_MESSAGE = (
+DEFAULT_REFUSAL_MESSAGE = (
     "I can only assist with Veltrix HR policies and leave management within your permitted scope."
 )
 
-GREETING_MESSAGE = "Hello! I am your Veltrix PeopleOps Assistant. How can I assist you with HR policies or leave today?"
+DEFAULT_GREETING_MESSAGE = "Hello! I am your Veltrix PeopleOps Assistant. How can I assist you with HR policies or leave today?"
+
+
+def get_refusal_message() -> str:
+    """Load refusal message from prompts or fallback."""
+    return load_prompt("refusal_message", default=DEFAULT_REFUSAL_MESSAGE)
+
+
+def get_greeting_message() -> str:
+    """Load greeting message from prompts or fallback."""
+    return load_prompt("greeting_message", default=DEFAULT_GREETING_MESSAGE)
+
+
+REFUSAL_MESSAGE = get_refusal_message()
+GREETING_MESSAGE = get_greeting_message()
 
 
 class Orchestrator:
@@ -155,7 +170,7 @@ class Orchestrator:
         if route == "greeting":
             res = Assembler.assemble_response(
                 answer=GREETING_MESSAGE,
-                intended_route="refuse",
+                intended_route="clarify",
             )
             self.session_manager.append_message(session_id, "assistant", res.answer)
             return res

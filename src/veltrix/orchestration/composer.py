@@ -11,6 +11,7 @@ from veltrix.domain.precedence import PrecedenceDecision
 from veltrix.ingestion.chunker import Chunk
 from veltrix.llm.base import LLMMessage, LLMRequest
 from veltrix.llm.gateway import LLMGateway
+from veltrix.llm.prompts import load_prompt
 
 logger = get_logger("composer")
 
@@ -29,7 +30,7 @@ class ComposerOutput(BaseModel):
     used_citations: list[UsedCitation] = Field(default_factory=list)
 
 
-COMPOSITION_SYSTEM_PROMPT = """You are the Veltrix PeopleOps Assistant.
+DEFAULT_COMPOSITION_SYSTEM_PROMPT = """You are the Veltrix PeopleOps Assistant.
 Formulate a helpful, clear, and professional response to the employee's question based strictly on the provided policy decision and evidence.
 
 Guidelines:
@@ -45,6 +46,14 @@ Guidelines:
 }
 Only cite documents that directly support your claims.
 """
+
+
+def get_composition_prompt() -> str:
+    """Load composition system prompt from prompts folder or fallback."""
+    return load_prompt("composition_system", default=DEFAULT_COMPOSITION_SYSTEM_PROMPT)
+
+
+COMPOSITION_SYSTEM_PROMPT = get_composition_prompt()
 
 
 class AnswerComposer:

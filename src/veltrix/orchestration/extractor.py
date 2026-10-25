@@ -9,6 +9,7 @@ from veltrix.domain.precedence import PolicyClaim
 from veltrix.ingestion.chunker import Chunk
 from veltrix.llm.base import LLMMessage, LLMRequest
 from veltrix.llm.gateway import LLMGateway
+from veltrix.llm.prompts import load_prompt
 
 logger = get_logger("extractor")
 
@@ -36,7 +37,7 @@ class ClaimExtractionOutput(BaseModel):
     claims: list[ExtractedClaimSchema] = Field(default_factory=list)
 
 
-EXTRACTION_SYSTEM_PROMPT = """You are a precise data extraction specialist for company policies.
+DEFAULT_EXTRACTION_SYSTEM_PROMPT = """You are a precise data extraction specialist for company policies.
 Analyze the provided document passages and extract specific factual policy rules, allowances, and requirements.
 
 Group rules that govern the SAME policy topic under the same group_id (e.g. 'annual_leave_allowance', 'volunteer_leave', 'probation_period', 'working_hours').
@@ -56,6 +57,14 @@ Strictly output a JSON object matching this schema:
 
 Only extract claims explicitly stated in the evidence. If a passage does not mention rules relevant to the query, omit it.
 """
+
+
+def get_extraction_prompt() -> str:
+    """Load extraction system prompt from prompts folder or fallback."""
+    return load_prompt("extraction_system", default=DEFAULT_EXTRACTION_SYSTEM_PROMPT)
+
+
+EXTRACTION_SYSTEM_PROMPT = get_extraction_prompt()
 
 
 class ClaimExtractor:

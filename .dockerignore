@@ -14,3 +14,4 @@ build/
 data/
 app.db
 chroma_db/
+eval/

@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 from veltrix.core.logging import get_logger
 from veltrix.domain.models import RequestContext
+from veltrix.llm.prompts import load_prompt
 
 if TYPE_CHECKING:
     from veltrix.llm.gateway import LLMGateway
@@ -53,7 +54,7 @@ class IntentClassification(BaseModel):
     reason: str = Field(default="")
 
 
-INTENT_SYSTEM_PROMPT = """You are the enterprise Intent, Slot, and Route Classifier for the Veltrix PeopleOps Assistant.
+DEFAULT_INTENT_SYSTEM_PROMPT = """You are the enterprise Intent, Slot, and Route Classifier for the Veltrix PeopleOps Assistant.
 Your task is to accurately classify the employee's intent, route, and parameters dynamically from their message and context.
 
 Routes and Actions:
@@ -99,6 +100,14 @@ Output JSON strictly adhering to schema:
   "reason": "..."
 }
 """
+
+
+def get_intent_prompt() -> str:
+    """Load intent system prompt from prompts folder or fallback."""
+    return load_prompt("intent_system", default=DEFAULT_INTENT_SYSTEM_PROMPT)
+
+
+INTENT_SYSTEM_PROMPT = get_intent_prompt()
 
 
 class Router:

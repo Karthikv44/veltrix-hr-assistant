@@ -25,6 +25,7 @@ app.db
 .coverage
 htmlcov/
 .ruff_cache/
+eval/
 
 # IDE & OS files
 .DS_Store
