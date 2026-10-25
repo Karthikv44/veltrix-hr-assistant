@@ -119,12 +119,24 @@ class Orchestrator:
                 intended_route="refuse",
             )
 
-        # 4. Handle Hybrid (Both documents and tools)
+        # 4. Handle Clarify (Dynamic question formulated by Intent Classifier LLM)
+        if route == "clarify":
+            clarification_text = classification.clarification_question or (
+                "Could you please clarify your request? For leave applications, please specify whether you need 'annual' or 'sick' leave and the dates."
+            )
+            return Assembler.assemble_response(
+                answer=clarification_text,
+                intended_route="clarify",
+            )
+
+        # 5. Handle Hybrid (Both documents and tools)
         if route == "hybrid":
             answer, citations, tool_calls = await self.hybrid_pipeline.execute(
                 query=message,
                 ctx=ctx,
                 today=reference_date,
+                leave_type=classification.leave_type,
+                target_month=classification.target_month,
             )
             return Assembler.assemble_response(
                 answer=answer,
@@ -133,7 +145,7 @@ class Orchestrator:
                 tool_calls=tool_calls,
             )
 
-        # 5. Handle Leave Tools (Action driven directly from classified intent)
+        # 6. Handle Leave Tools (Action driven directly from classified intent)
         if route == "leave_tool":
             return await self.tool_pipeline.execute_or_propose(
                 session_id=session_id,

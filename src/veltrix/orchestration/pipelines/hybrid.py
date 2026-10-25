@@ -49,12 +49,13 @@ class HybridPipeline:
         query: str,
         ctx: RequestContext,
         today: date,
+        leave_type: str | None = None,
+        target_month: int | None = None,
     ) -> tuple[str, list[Citation], list[ToolCallRecord]]:
         """Process hybrid inquiry by retrieving documents and invoking leave tools."""
-        text = query.lower()
+        lt = leave_type or "annual"
 
         # 1. Fetch current balance via tool
-        lt = "annual" if "annual" in text else ("sick" if "sick" in text else "annual")
         bal_res = await self.leave_tools.get_leave_balance(
             ctx=ctx, employee_id=ctx.employee_id, leave_type=lt
         )
@@ -71,13 +72,7 @@ class HybridPipeline:
             reference_date=today,
         )
 
-        # 3. Detect if asking for future balance projection (e.g. "by December")
-        target_month = None
-        for month_name, m_idx in MONTH_MAP.items():
-            if month_name in text:
-                target_month = m_idx
-                break
-
+        # 3. Handle projection if target month provided by classifier
         if target_month is not None:
             projection = self.future_calc.calculate_projected_balance(
                 ctx=ctx,
