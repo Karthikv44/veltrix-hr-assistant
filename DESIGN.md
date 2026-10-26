@@ -24,6 +24,9 @@
   - Reciprocal Rank Fusion (RRF with $k=60$) merges rankings.
   - Doc-level deduplication limits chunks to at most 2 per document.
   - Greedy packer fits chunks into the 3,000-token LLM context budget (leaving a 200-token buffer).
+- **LLM Gateway & Provider Support**:
+  - The current implementation supports exclusively the Google Gemini client (`GeminiClient`).
+  - `LLMGateway` enforces a hard limit of $\le 3,000$ corpus tokens per request, implements in-memory caching, exponential backoff retries, and latency tracking.
 
 ## 3. Section 5 Precedence Engine
 - **Deterministic Python Precedence (`PrecedenceResolver`)**:

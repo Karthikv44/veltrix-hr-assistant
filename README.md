@@ -29,7 +29,7 @@ flowchart TD
     end
     
     Orchestrator --> LLMGateway["LLM Gateway<br/>(<= 3000 corpus tokens guard)"]
-    LLMGateway --> LLM["LLM Providers<br/>(Gemini, OpenAI, Anthropic)"]
+    LLMGateway --> LLM["LLM Provider<br/>(Google Gemini)"]
     Orchestrator --> Tools["Leave Management Tools<br/>(apply_leave, cancel_leave, balances)"]
     Tools --> VeltrixDB["SQLite veltrix.db<br/>(Read-only employee/leave tables)"]
 ```
@@ -54,6 +54,9 @@ Create a `.env` file from the provided template:
 ```bash
 cp .env.example .env
 ```
+
+> **LLM Provider Note**: The current implementation supports **only the Google Gemini client** (`LLM_PROVIDER=gemini`). Provide your Gemini API key via `GEMINI_API_KEY` or `GOOGLE_API_KEY` in `.env`. Alternative providers are not supported in this release.
+
 Ensure the data paths in `.env` point to your `./data` directory:
 ```env
 CORPUS_DIR=./data/corpus
@@ -63,6 +66,7 @@ APP_DB_PATH=./app.db
 CHROMA_DIR=./chroma_db
 APP_TODAY=2026-09-15
 LLM_PROVIDER=gemini
+GEMINI_API_KEY=your_gemini_api_key_here
 ```
 
 ### 3. Running with Docker Compose
@@ -169,8 +173,8 @@ uv run pytest tests/integration/test_mutated_corpus.py
 
 ---
 
-## Assumptions
-See [`docs/ASSUMPTIONS.md`](docs/ASSUMPTIONS.md) for the running ledger of decisions, including:
-- Manifest metadata is the sole authoritative source of document IDs, access levels, and regions.
-- Public holidays are extracted automatically and used to determine working days for leave applications.
-- In-document metadata headers/tables are stripped from chunk texts to avoid polluting vector search and LLM prompts.
+## Key Architectural Assumptions
+- **LLM Provider**: Current implementation supports exclusively the Google Gemini client (`LLM_PROVIDER=gemini`).
+- **Manifest Authority**: `manifest.json` metadata is the sole authoritative source of document IDs, access levels, and regions.
+- **Holiday & Calendar Math**: Public holidays are extracted automatically into SQLite and used to determine working days for leave applications.
+- **Metadata Scrubbing**: In-document metadata headers/tables are stripped from chunk texts to avoid polluting vector search and LLM prompts.
