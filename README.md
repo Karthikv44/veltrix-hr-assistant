@@ -12,7 +12,7 @@ flowchart TD
     API --> Security["Identity & Session Guard<br/>(X-Employee-Id, 401/403)"]
     Security --> Orchestrator["Assistant Orchestrator"]
     
-    subgraph Ingestion ["Ingestion Pipeline (M2)"]
+    subgraph Ingestion ["Ingestion Pipeline"]
         Manifest["manifest.json"] --> Loaders["Loader Registry<br/>(PDF, DOCX, MD, HTML, OCR)"]
         Loaders --> Cleaning["Cleaning & Metadata Stripping"]
         Cleaning --> Holidays["Holiday Table Extraction"]
@@ -22,7 +22,7 @@ flowchart TD
         Embedder --> Chroma["ChromaDB PersistentClient<br/>(cosine space)"]
     end
     
-    subgraph Retrieval ["Hybrid Retrieval (M3)"]
+    subgraph Retrieval ["Hybrid Retrieval"]
         Scope["RetrievalScope<br/>(Role, Region, Effective Date)"] --> ChromaSearch["Dense Vector Search<br/>(Pre-filtered)"]
         Scope --> BM25Search["BM25 Lexical Search<br/>(Eligible chunks only)"]
         ChromaSearch & BM25Search --> RRF["Reciprocal Rank Fusion<br/>& Doc-ID Grouping"]
@@ -107,7 +107,7 @@ make lint
 
 ---
 
-## Verified Ingestion Features (Milestone M2)
+## Document Ingestion Features
 - **Universal Format Support**: Handled via `LoaderRegistry` for `.pdf`, `.docx`, `.md`, and `.html`.
 - **Scanned Document OCR**: Seamless 300 DPI image rendering, Pillow contrast enhancement, and Tesseract OCR execution for scanned PDFs with no text layer.
 - **Table Preservation**: Tables in DOCX, Markdown, and HTML are preserved in chronological context; large tables are segmented by row groups while repeating headers.
@@ -161,15 +161,6 @@ uv run python scripts/eval_queries.py --base-url http://localhost:8000
 4. **Permission Enforcement / Refusal**:
    - Unauthorized team leave view attempts: If a non-manager employee attempts to query a colleague's or team's leave requests, the tool blocks the request at the database level and returns an authorization refusal error.
    - Out of scope queries (e.g. coding requests): The router classifies the intent as `refuse` and politely declines to answer non-HR questions.
-
----
-
-## Testing Mutated Corpus (Must-Pass Check 5)
-To verify that no facts or numbers are hardcoded, generate a mutated corpus and re-run ingestion:
-```bash
-uv run python scripts/mutate_corpus.py --target-dir ./data_mutated
-uv run pytest tests/integration/test_mutated_corpus.py
-```
 
 ---
 
