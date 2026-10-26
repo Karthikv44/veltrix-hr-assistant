@@ -32,7 +32,7 @@ def _strip_additional_properties(schema: Any) -> Any:
 class GeminiClient:
     """LLM client adapter for Google Gemini models using official google-genai SDK."""
 
-    def __init__(self, api_key: str, model: str = "gemini-2.5-flash") -> None:
+    def __init__(self, api_key: str, model: str = "gemini-3.8-flash") -> None:
         self.api_key = api_key
         self.model = model
         self._client: genai.Client | None = None
